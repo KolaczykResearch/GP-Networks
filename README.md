@@ -1,7 +1,7 @@
 # GP-Networks
 This repository contains code supporting the text "Bayesian classification, anomaly detection, and survival analysis using network inputs with application to the microbiome"
 
-https://arxiv.org
+https://arxiv.org/abs/2004.04765v1
 
 ## R
 
