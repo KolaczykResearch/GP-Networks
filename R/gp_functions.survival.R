@@ -6,67 +6,6 @@ library(abind)
 library(Matrix)
 
 # Functions ----
-ham_dis <- function(G1, G2) {
-  # computes modified Hamming distance
-  
-  n <- nrow(G1)
-  sum((G1 - G2)^2) / (n * (n-1))       # square (equivalent for binary)
-}
-
-kern.dis <- function(G, X = NULL) {
-  # computes distance matrix (array) given G (and X)
-  # NB: distance matrix for X is squared-Euclidean distance
-  
-  require(parallel)
-  
-  p.G <- ifelse(missing(G), 0, length(G))
-  p.X <- ifelse(is.null(ncol(X)), 0, ncol(X))
-  
-  if (!missing(G)) {
-    N <- length(G[[1]])
-    D <- array(0, dim = c(N, N, p.G + p.X))
-    
-    for (pp in 1:p.G) {
-      D.ham <- matrix(0, N, N)
-      d <- unlist(mclapply(mc.cores = detectCores() - 1
-                           , 1:(N - 1)
-                           , function(i) sapply((i+1):N
-                                                , function(j)
-                                                  ham_dis(G[[pp]][[i]]
-                                                          , G[[pp]][[j]])
-                           )))
-      
-      D.ham[lower.tri(D.ham, diag = F)] <- d
-      D.ham[upper.tri(D.ham, diag = F)] <- t(D.ham)[upper.tri(D.ham, diag = F)]
-      D[, , pp] <- D.ham
-    }
-  }
-  
-  if (!is.null(X)) {
-    N <- nrow(X); p <- ncol(X)
-    
-    if (missing(G)) {
-      D <- array(0, dim = c(N, N, p.X))
-    }
-    
-    for (pp in 1:p.X) {
-      D.pp <- matrix(0, N, N)
-      d <- unlist(mclapply(mc.cores = detectCores() - 1
-                           , 1:(N - 1)
-                           , function(i) sapply((i+1):N
-                                                , function(j)
-                                                  (X[i, pp] - X[j, pp])^2
-                           )))
-      
-      D.pp[lower.tri(D.pp, diag = F)] <- d
-      D.pp[upper.tri(D.pp, diag = F)] <- t(D.pp)[upper.tri(D.pp, diag = F)]
-      D[, , p.G + pp] <- D.pp
-    }
-  }
-  
-  return(D)
-}
-
 kern.fun <- function(D, theta) {
   # computes squared-exponential kernel given distance matrix (array) D
   # NB: does not square distance
@@ -103,7 +42,6 @@ ilogit <- function (x) {
 }
 
 chol.fun <- function(x, jit = 1e-2) {
-  # compute Cholesky function with added jitter
   
   n <- nrow(x)
   L <- chol(x + diag(n) * jit^2)
@@ -112,8 +50,6 @@ chol.fun <- function(x, jit = 1e-2) {
 }
 
 rmvnorm <- function(n = 1, mu, C){
-  # samples from MVN given Cholesky of covariance
-
   p <- length(mu)
   
   if (p == 1) {
@@ -256,8 +192,6 @@ kern.dis_expand <- function(D, G_i) {
 }
 
 trap_rule <- function(grid, grid.values) {
-  # integration using trapezoidal rule
-
   n <- length(grid.values)
   delta <- grid[2] - grid[1]
   sum.pairs <- grid.values[-n] + grid.values[-1]
@@ -270,22 +204,6 @@ comb <- function(x, ...) {
 }
 
 slice <- function(theta, f, alpha, n.G, D, a, b, sigma = 10) {
-  # Implementation from:
-  # "Slice sampling covariance hyperparameters of latent Gaussian models"
-  #
-  # Jointly samples hyperparameters theta and latent function f
-  #
-  # Args:
-  #   theta       : kernel hyperparameters
-  #   f           : current latent position
-  #   alpha       : auxiliary noise
-  #   n.G         : |G|, i.e number of rejected points
-  #   D           : distance array D s.t kernel K(D) with f ~ GP(0, K)
-  #   a, b        : Hyperpriors for theta ~ Inv-Gamma(a, b)
-  #   sigma       : width of slice
-  #
-  # Returns:
-  #   New theta and f
   
   log.lik <- function(u, f, C, g, theta, a, b) {
     log(u) +                                                 # u
@@ -361,9 +279,6 @@ slice <- function(theta, f, alpha, n.G, D, a, b, sigma = 10) {
 }
 
 elliptical <- function(f0, n.G, C) {
-  # Implementation from:
-  # "Elliptical slice sampling"
-  #
   # Samples f1 using elliptical slice sampler
   #
   # Args:
@@ -399,8 +314,7 @@ elliptical <- function(f0, n.G, C) {
 
 gp.survival <- function(dist, Y, a, b, N = 100
                         , burn = .2, thin = 10, grid.length = 100) {
-  # Algorithm 2 from paper
-  #
+  
   # Samples from GP Survival posterior 
   # with exponential baseline hazard function
   #
@@ -409,9 +323,6 @@ gp.survival <- function(dist, Y, a, b, N = 100
   #   Y           : survival times
   #   a, b        : Hyperpriors for Omega and hyperparameters
   #   N           : number of samples
-  #   burn        : how long is burn-in
-  #   thin        : how often to thin
-  #   grid.length : grid length for trapezoidal rule
   #
   # Returns:
   #   Chains for hyperparameters and survival
@@ -445,8 +356,6 @@ gp.survival <- function(dist, Y, a, b, N = 100
   A_i <- vector("list", n)
   
   l <- vector("list", N)
-  K <- kern.fun(D.mat, hyperparams[, 1])
-  K.chol <- chol.fun(K)
   l[[1]] <- rep(0, n)
   l.A <- vector("list", n)
   U_i <- vector("list", n)
@@ -456,6 +365,7 @@ gp.survival <- function(dist, Y, a, b, N = 100
   grid <- seq(0, max(Y) * 1.025, delta)
   store <- round(seq(burn*N, N, thin))
   surv <- array(dim = c(grid.length, n, length(store)))
+  K <- kern.fun(D.mat, hyperparams[, 1])
   K.chol <- chol.fun(K)
   K.inv <- chol2inv(K.chol)
   D.grid <- kern.dis_star(Y, grid)
@@ -480,14 +390,15 @@ gp.survival <- function(dist, Y, a, b, N = 100
       
       Lambda_0 <- lambda_0*Y[i]             # cumulative hazard function
       n_i <- rpois(1, Lambda_0)
-      A.tilde <- runif(n_i, max = Lambda_0)
-      A_i <- A.tilde / lambda_0        # Lambda^{-1} (A.tilde)
       
       # line 7 : sample l(A) | l(G U T), lambda_0
       if (n_i == 0) { # no A_i generated from Poisson process
         return(list(c(), c()))
         
       } else {
+        
+        A.tilde <- runif(n_i, max = Lambda_0)
+        A_i <- A.tilde / lambda_0        # Lambda^{-1} (A.tilde)
         
         D.A_rep <- kern.dis_expand_A(dist[, , -p, drop = FALSE], G, A_i, i)
         D.A <- kern.dis_star(c(Y, unlist(G)), A_i)
@@ -562,7 +473,7 @@ gp.survival <- function(dist, Y, a, b, N = 100
       K.inv <- chol2inv(K.chol)
       D.grid <- kern.dis_star(c(Y, unlist(G)), grid)
       for (j in 1:n) {
-        D.grid_rep <- kern.dis_expand_grid(D[, , -p, drop = FALSE], G, grid, j)
+        D.grid_rep <- kern.dis_expand_grid(dist[, , -p, drop = FALSE], G, grid, j)
         D.grid_mat <- abind(D.grid_rep, D.grid)
         Ks <- kern.fun(D.grid_mat, hyperparams[, q])
         surv[, j, which(store == q)] <- crossprod(Ks, K.inv) %*% l[[q]]

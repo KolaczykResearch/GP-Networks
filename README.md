@@ -1,7 +1,7 @@
 # GP-Networks
 This repository contains code supporting the text "Bayesian classification, anomaly detection, and survival analysis using network inputs with application to the microbiome"
 
-https://arxiv.org/abs/2004.04765v1
+https://arxiv.org/abs/2004.04765
 
 ## R
 
@@ -10,13 +10,15 @@ https://arxiv.org/abs/2004.04765v1
 
 ## Figures
 
-* Figures 1, 8, 9 : Microbiome/microbiome.analysis.R
-* Figure 2           : Microbiome/microbioms.networks.R
-* Figures 4, 10   : Simulations/simulation.class.R
+* Figures 1, 7, 8 : Microbiome/microbiome.analysis.R
+* Figure 2           : Microbiome/microbiome.networks.R
+* Figure 4           : Simulations/simulation.class.R
 * Figure 5           : Simulations/simulation.occ.R
-* Figure 6           : Simulations/simulation.survival_easy.R
-* Figure 7           : Simulations/simulation.survival_hard.R
-* Figure 8           : Simulations/simulation.survival_easy.R
+* Figure 6           : Simulations/simulation.survival.R
+
+## Tables
+
+* Table 1 : Microbiome/microbiome.analysis.R
 
 ## Data
 
@@ -25,4 +27,4 @@ https://arxiv.org/abs/2004.04765v1
 DiGiulio, Daniel B., et al. "Temporal and spatial variation of the human microbiota during pregnancy." Proceedings of the National Academy of Sciences 112.35 (2015): 11060-11065.
 
 ### Connectomics
-Relión, Jesús D. Arroyo, et al. "Network classification with applications to brain connectomics." The Annals of Applied Statistics 13.3 (2019): 1648-1677.
+Arroyo Relión, Jesús D., et al. "Network classification with applications to brain connectomics." The Annals of Applied Statistics 13.3 (2019): 1648-1677.

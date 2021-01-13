@@ -3,67 +3,6 @@ library(igraph)
 library(invgamma)
 
 # Functions ----
-ham_dis <- function(G1, G2) {
-  # computes modified Hamming distance
-  
-  n <- nrow(G1)
-  sum((G1 - G2)^2) / (n * (n-1))       # square (equivalent for binary)
-}
-
-kern.dis <- function(G, X = NULL) {
-  # computes distance matrix (array) given G (and X)
-  # NB: distance matrix for X is squared-Euclidean distance
-  
-  require(parallel)
-  
-  p.G <- ifelse(missing(G), 0, length(G))
-  p.X <- ifelse(is.null(ncol(X)), 0, ncol(X))
-  
-  if (!missing(G)) {
-    N <- length(G[[1]])
-    D <- array(0, dim = c(N, N, p.G + p.X))
-    
-    for (pp in 1:p.G) {
-      D.ham <- matrix(0, N, N)
-      d <- unlist(mclapply(mc.cores = detectCores() - 1
-                           , 1:(N - 1)
-                           , function(i) sapply((i+1):N
-                                                , function(j)
-                                                  ham_dis(G[[pp]][[i]]
-                                                          , G[[pp]][[j]])
-                           )))
-      
-      D.ham[lower.tri(D.ham, diag = F)] <- d
-      D.ham[upper.tri(D.ham, diag = F)] <- t(D.ham)[upper.tri(D.ham, diag = F)]
-      D[, , pp] <- D.ham
-    }
-  }
-  
-  if (!is.null(X)) {
-    N <- nrow(X); p <- ncol(X)
-    
-    if (missing(G)) {
-      D <- array(0, dim = c(N, N, p.X))
-    }
-    
-    for (pp in 1:p.X) {
-      D.pp <- matrix(0, N, N)
-      d <- unlist(mclapply(mc.cores = detectCores() - 1
-                           , 1:(N - 1)
-                           , function(i) sapply((i+1):N
-                                                , function(j)
-                                                  (X[i, pp] - X[j, pp])^2
-                           )))
-      
-      D.pp[lower.tri(D.pp, diag = F)] <- d
-      D.pp[upper.tri(D.pp, diag = F)] <- t(D.pp)[upper.tri(D.pp, diag = F)]
-      D[, , p.G + pp] <- D.pp
-    }
-  }
-  
-  return(D)
-}
-
 kern.fun <- function(D, theta) {
   # computes squared-exponential kernel given distance matrix (array) D
   # NB: does not square distance
@@ -100,8 +39,6 @@ ilogit <- function (x) {
 }
 
 rmvnorm <- function(n = 1, mu, C){
-  # samples from MVN given Cholesky of covariance
-
   p <- length(mu)
   
   if (p == 1) {
@@ -117,7 +54,6 @@ rmvnorm <- function(n = 1, mu, C){
 }
 
 chol.fun <- function(x, jit = 1e-6) {
-  # compute Cholesky function with added jitter
   
   n <- nrow(x)
   L <- chol(x + diag(n) * jit^2)
@@ -126,22 +62,6 @@ chol.fun <- function(x, jit = 1e-6) {
 }
 
 slice <- function(theta, f, alpha, Y, D, a, b, sigma = 10) {
-  # Implementation from:
-  # "Slice sampling covariance hyperparameters of latent Gaussian models"
-  #
-  # Jointly samples hyperparameters theta and latent function f
-  #
-  # Args:
-  #   theta       : kernel hyperparameters
-  #   f           : current latent position
-  #   alpha       : auxiliary noise
-  #   Y           : class labels
-  #   D           : distance array D s.t kernel K(D) with f ~ GP(0, K)
-  #   a, b        : Hyperpriors for theta ~ Inv-Gamma(a, b)
-  #   sigma       : width of slice
-  #
-  # Returns:
-  #   New theta and f
   
   log.lik <- function(u, f, C, g, theta, a, b, Y) {
     log(u) +                                                 # u
@@ -216,9 +136,6 @@ slice <- function(theta, f, alpha, Y, D, a, b, sigma = 10) {
 }
 
 elliptical <- function(f0, C, Y) {
-  # Implementation from:
-  # "Elliptical slice sampling"
-  #
   # Samples f1 using elliptical slice sampler
   #
   # Args:
@@ -254,17 +171,14 @@ elliptical <- function(f0, C, Y) {
 }
 
 gp.class <- function(dist, Y, split_index, a, b, ns = 1000, monitor = TRUE) {
-  # Algorithm 1 from paper
-  #
   # Samples from p(f | X, Y)
   #
   # Args:
   #   dist        : distance array D s.t kernel K(D) with f ~ GP(0, K)
   #   Y           : Binary response vector
   #   split_index : Train/validate assignment
-  #   a, b        : Hyperpriors for theta ~ Inv-Gamma(a, b)
+  #   a, b        : Hyperpriors for theta ~ InvGamma(a, b)
   #   ns          : number of samples
-  #   monitor     : if TRUE, print progress
   #
   # Returns:
   #   Sample from latent posterior
@@ -278,7 +192,7 @@ gp.class <- function(dist, Y, split_index, a, b, ns = 1000, monitor = TRUE) {
   ## p(f | X, y)
   p <- length(a)
   theta <- matrix(nrow = p, ncol = ns)      # theta = (sigma, l_1, ..., l_p)
-  theta[1, 1] <- 1                                      # ell ~ IG(0, 0)
+  theta[1, 1] <- 1                                      # sigma ~ IG(0, 0)
   theta[-1, 1] <- b[-1] / (a[-1] + 1)                   # ell ~ IG(a, b)
   f <- matrix(nrow = N.train, ncol = ns); f[, 1] <- 0   # prior mean
   lp.f <- numeric(ns); lp.f[1] <- 0
@@ -328,20 +242,6 @@ gp.class <- function(dist, Y, split_index, a, b, ns = 1000, monitor = TRUE) {
 }
 
 gp.class_pred <- function(gpc, D, split_index, p, burn = .2, thin = 10, avg = TRUE) {
-  # Computes predictions for validation set
-  #
-  # Args:
-  #   gpc         : gp.class object
-  #   D           : distance array D s.t kernel K(D) with f ~ GP(0, K)
-  #   split_index : Train/validate assignment
-  #   p           : number of parameters
-  #   burn        : how long is burn-in
-  #   thin        : how often to thin
-  #   avg         : if TRUE, use eq. (4) from paper
-  #
-  # Returns:
-  #   Class probabilities for validation set
-
   ns <- dim(gpc)[1]
   samp <- seq(burn*ns, ns, thin)
   
