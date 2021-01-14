@@ -212,7 +212,7 @@ compare_classifiers <- function(m, n, mod) {
 }
 
 # Simulation ----
-mod <- 4:5#1:5
+mod <- 1:5
 m <- seq(40, 340, 60) # total sample size
 n <- seq(20, 100, 20) # number of nodes
 grid <- expand.grid(m, n, mod, stringsAsFactors = FALSE)
