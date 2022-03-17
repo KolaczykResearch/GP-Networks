@@ -1,3 +1,4 @@
+# Version : R 4.0.5
 # Libraries ----
 library(SpiecEasi)
 library(ggplot2)
@@ -8,7 +9,7 @@ library(doParallel)
 library(igraph)
 
 # Data ----
-load("/Data/PregnancyClosed15.Rdata")
+load("./Data/PregnancyClosed15.Rdata")
 
 df <- data.frame(SubjectID = PS@sam_data@.Data[[5]]
                  , GDDel = PS@sam_data@.Data[[19]]
@@ -61,7 +62,10 @@ df <- subset_samples(df, BodySite == "Vaginal_Swab")
 
 otu <- otu_table(df)@.Data
 otu.present <- otu; otu.present[otu > 0] <- 1
-taxa_rare <- which(colSums(otu.present) < 10 | colSums(otu) < 500)
+
+taxa.low_abundance <- which(colSums(otu) < 500)
+taxa.low_counts <- which(colSums(otu.present) < 10)
+taxa.exclude <- unique(c(taxa.low_abundance, taxa.low_counts))
 
 samples <- data.frame(SubjectID = df@sam_data@.Data[[5]]
                       , GDColl = df@sam_data@.Data[[8]]
@@ -81,12 +85,12 @@ m <- length(SubjectID)
 cores <- detectCores()
 cl <- makeCluster(cores)
 registerDoParallel(cl)
-G <- foreach(k = 1:m, .combine = c
+G <- foreach(k = seq_len(m), .combine = c
              , .packages = c("SpiecEasi", "phyloseq")
 ) %dopar% {
   set.seed(575)
   otu.subject <- otu[which(sample_data(df)[["SubjectID"]] == SubjectID[k])
-                     , -taxa_rare]
+                     , -taxa.exclude]
   corr <- sparcc(otu.subject)$Cor
   diag(corr) <- 0
   list(corr)
@@ -99,11 +103,13 @@ Y <- ifelse(Outcomes[Outcomes$SubjectID %in% SubjectID
 X <- as.numeric(as.character(History[History$SubjectID %in% SubjectID, "History"]))
 GDDel <- Outcomes[Outcomes$SubjectID %in% SubjectID, "GDDel"] / 100
 
+save(G, Y, X, GDDel, file = "./Data/microbiome.RData")
+
 # Visualization ----
 taxa <- tax_table(df)@.Data
-taxa.genus <- taxa[-taxa_rare, "Genus"]
-taxa.species <- taxa[-taxa_rare, "Species"]
-taxa.phylum <- taxa[-taxa_rare, "Phylum"]
+taxa.genus <- taxa[-taxa.exclude, "Genus"]
+taxa.species <- taxa[-taxa.exclude, "Species"]
+taxa.phylum <- taxa[-taxa.exclude, "Phylum"]
 
 otu.prop <- apply(otu, 2, function(x) x / sum(x))
 
@@ -113,7 +119,7 @@ par(mar = c(0, 0, 0, 0) + .1)
 net1 <- graph_from_adjacency_matrix(G[[19]]
                                     , mode = "undirected", weighted = TRUE)
 otu1 <- otu[which(sample_data(df)[["SubjectID"]] == SubjectID[19])
-            , -taxa_rare]
+            , -taxa.exclude]
 
 V(net1)$taxa <- colMeans(otu1)
 V(net1)$color <- as.factor(taxa.phylum)
@@ -134,7 +140,7 @@ title("Preterm", line = -14.5)
 net2 <- graph_from_adjacency_matrix(G[[10]]
                                     , mode = "undirected", weighted = TRUE)
 otu2 <- otu[which(sample_data(df)[["SubjectID"]] == SubjectID[10])
-            , -taxa_rare]
+            , -taxa.exclude]
 
 V(net2)$taxa <- colMeans(otu2)
 V(net2)$color <- as.factor(taxa.phylum)
@@ -153,9 +159,6 @@ title("Term", line = -14.5)
 title("Individual Microbiome Networks", line = -1.5, outer = TRUE)
 
 # EDA ----
-# need to use absolute value but doesn't distinguish between
-#    positive and negative weights
-# could binarize but wouldn't capture strength of edge
 
 G_abs <- lapply(G, abs)
 G_inv <- lapply(G_abs, function(x) 1/x)

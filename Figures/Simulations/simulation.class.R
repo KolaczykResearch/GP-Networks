@@ -1,18 +1,18 @@
-# Version : R 3.6.0
+# Version : R 4.0.0
 # Libraries ----
 library(parallel)
 library(ergm)
 library(kernlab)
 library(graphkernels)
 library(class)
-library(graphclass)
+library(graphclass) # devtools::install_github("jesusdaniel/graphclass")
 
 # Functions ----
-source("/R/rcorrER.R")
-source("/R/gp_functions.gibbs_slice.R")
-source("/R/dist.R")
-source("/R/gp_rw.gibbs.R")
-source("/R/mase.R")
+source(".R/rcorrER.R")
+source(".R/gp_functions.gibbs_slice.R")
+source(".R/revisions/dist.R")
+source(".R/gp_rw.gibbs.R")
+source(".R/mase.R")
 
 compare_classifiers <- function(m, n, mod) {
   
@@ -168,44 +168,56 @@ compare_classifiers <- function(m, n, mod) {
   
   cost.best <- cost.cv[, which.min(cost.cv[2, ])]
   f_svm <- ksvm(X_train, Y_train, type = "C-svc", kernel = "matrix"
-                , C = cost.best[[1]])
+                , C = cost.best[[1]]
+                , prob.model = TRUE)
   
   X_validate <- as.kernelMatrix(X[split_index == "validate"
                                   , split_index == "train"][, SVindex(f_svm)
                                                             , drop = FALSE])
   Y_validate <- Y[split_index == "validate"]
   pred.SVM_RW <- predict(f_svm, X_validate)
+  prob.SVM_RW <- try(predict(f_svm, X_validate, type = "prob")[, 1])
+  if (class(prob.SVM_RW) == "try-error") { # line search fails
+    prob.SVM_RW <- NA 
+  }
   
   # graphclass ----
   X <- G
   X <- lapply(X, as.matrix)
   X <- t(sapply(X, function(x) x[upper.tri(x)]))
   gc <- graphclass(X = X[split_index == "train", ]
-                   , Y = Y[split_index == "train"]
+                   , Y = Y_train
                    , Xtest = X[split_index == "validate", ]
-                   , Ytest = Y[split_index == "validate"])
+                   , Ytest = Y_validate)
   
   # MASE ----
   # multiple adjacency spectral embedding with kNN
   mase.embed <- try(mase(G[split_index == "train"], d = 2))
   if (class(mase.embed) == "try-error") { # eigen decomposition fails sometimes
-    pred.mase <- NA
+    pred.mase <- prob.mase <- NA
   } else {
     mase.validate <- project_networks(G[split_index == "validate"], mase.embed$V)
     mase.Xtrain <- t(sapply(mase.embed$R, as.vector))
     mase.Xvalidate <- t(sapply(mase.validate, as.vector))
     pred.mase <- knn(train = mase.Xtrain, test = mase.Xvalidate
-                     , cl = Y[split_index == "train"], k = 1)
+                     , cl = Y_train, k = 7, prob = TRUE)
+    prob.mase <- attributes(pred.mase)$prob
   }
   
   # Evaluate ----
   m.validate <- sum(split_index == "validate")
-  return(list(GP_F = sum(ifelse(pred.GP_F > .5, 1, -1) == Y[split_index == "validate"]) / m.validate
-              , GP_lambda = sum(ifelse(pred.GP_lambda > .5, 1, -1) == Y[split_index == "validate"]) / m.validate
-              , GP_RW = sum(ifelse(pred.GP_rw > .5, 1, -1) == Y[split_index == "validate"]) / m.validate
-              , SVM_RW = sum(pred.SVM_RW == Y[split_index == "validate"]) / m.validate
+  return(list(GP_F = sum(ifelse(pred.GP_F > .5, 1, -1) == Y_validate) / m.validate
+              , GP_F.auc = roc(Y_validate, pred.GP_F)
+              , GP_lambda = sum(ifelse(pred.GP_lambda > .5, 1, -1) == Y_validate) / m.validate
+              , GP_lambda.auc = roc(Y_validate, pred.GP_lambda)
+              , GP_RW = sum(ifelse(pred.GP_rw > .5, 1, -1) == Y_validate) / m.validate
+              , GP_RW.auc = roc(Y_validate, pred.GP_rw)
+              , SVM_RW = sum(pred.SVM_RW == Y_validate) / m.validate
+              , SVM_RW.auc = roc(Y_validate, prob.SVM_RW)
               , GC = 1 - gc$test_error
-              , MASE = sum(pred.mase == Y[split_index == "validate"]) / m.validate
+              , GC.auc = roc(Y_validate, gc$Yfit_test)
+              , MASE = sum(pred.mase == Y_validate) / m.validate
+              , MASE.auc = roc(Y_validate, prob.mase)
               , m = m
               , n = n))
   
@@ -216,19 +228,20 @@ mod <- 1:5
 m <- seq(40, 340, 60) # total sample size
 n <- seq(20, 100, 20) # number of nodes
 grid <- expand.grid(m, n, mod, stringsAsFactors = FALSE)
-reps <- 50
+reps <- 100
 
-results <- matrix(nrow = nrow(grid), ncol = 15)
+results <- matrix(nrow = nrow(grid), ncol = 27)
 results <- as.data.frame(results)
 colnames(results) <- c("m", "n", "mod"
-                       , "GP_F.acc", "GP_F.sd"
-                       , "GP_lambda.acc", "GP_lambda.sd"
-                       , "GP_RW.acc", "GP_RW.sd"
-                       , "SVM_RW.acc", "SVM_RW.sd"
-                       , "GC.acc", "GC.sd"
-                       , "MASE.acc", "MASE.sd")
+                       , "GP_F.acc", "GP_F.sd", "GP_F.auc", "GP_F.auc_sd"
+                       , "GP_lambda.acc", "GP_lambda.sd", "GP_lambda.auc", "GP_lambda.auc_sd"
+                       , "GP_RW.acc", "GP_RW.sd", "GP_RW.auc", "GP_RW.auc_sd"
+                       , "SVM_RW.acc", "SVM_RW.sd", "SVM_RW.auc", "SVM_RW.auc_sd"
+                       , "GC.acc", "GC.sd", "GC.auc", "GC.auc_sd"
+                       , "MASE.acc", "MASE.sd", "MASE.auc", "MASE.auc_sd")
 
-for (g in 1:nrow(grid)) {
+n.cores <- detectCores()
+for (g in seq_len(nrow(grid))) {
   # Set simulation condition
   m <- grid[g, 1]
   n <- grid[g, 2]
@@ -236,7 +249,7 @@ for (g in 1:nrow(grid)) {
   
   # Replicate condition
   start <- Sys.time()
-  result <- simplify2array(mclapply(seq_len(reps), mc.cores = detectCores()
+  result <- simplify2array(mclapply(seq_len(reps), mc.cores = n.cores
                                     , FUN = function (r) {
                                       set.seed(r) # reproducibility in parallel
                                       unlist(compare_classifiers(m = m, n = n, mod = mod))
@@ -253,23 +266,31 @@ for (g in 1:nrow(grid)) {
   GC <- result["GC", ]
   MASE <- result["MASE", ]
   
+  GP_F.auc <- result["GP_F.auc", ]
+  GP_lambda.auc <- result["GP_lambda.auc", ]
+  GP_RW.auc <- result["GP_RW.auc", ]
+  SVM_RW.auc <- result["SVM_RW.auc", ]
+  GC.auc <- result["GC.auc", ]
+  MASE.auc <- result["MASE.auc", ]
+  
   results[g, ] <- c(m, n, mod
-                    , mean(GP_F), sd(GP_F)
-                    , mean(GP_lambda), sd(GP_lambda)
-                    , mean(GP_RW), sd(GP_RW)
-                    , mean(SVM_RW), sd(SVM_RW)
-                    , mean(GC), sd(GC)
-                    , mean(MASE, na.rm = TRUE), sd(MASE, na.rm = TRUE))
+                    , mean(GP_F), sd(GP_F), mean(GP_F.auc), sd(GP_F.auc)
+                    , mean(GP_lambda), sd(GP_lambda), mean(GP_lambda.auc), sd(GP_lambda.auc)
+                    , mean(GP_RW), sd(GP_RW), mean(GP_RW.auc), sd(GP_RW.auc)
+                    , mean(SVM_RW), sd(SVM_RW), mean(SVM_RW.auc, na.rm = TRUE), sd(SVM_RW.auc, na.rm = TRUE)
+                    , mean(GC), sd(GC), mean(GC.auc), sd(GC.auc)
+                    , mean(MASE, na.rm = TRUE), sd(MASE, na.rm = TRUE), mean(MASE.auc, na.rm = TRUE), sd(MASE.auc, na.rm = TRUE))
 }
 
 # Plot ----
 library(reshape2)
 library(ggplot2)
 
-df.acc <- melt(results[, c(1:3, seq(4, 14, 2))], id = c("m", "n", "mod"))
+# accuracy
+df.acc <- melt(results[, c(1:3, seq(4, 24, 4))], id = c("m", "n", "mod"))
 colnames(df.acc) <- c("m", "n", "Setting", "Method", "Accuracy")
 df.acc$Method <- sub("\\..*", "", df.acc[, "Method"])
-df.sd <- melt(results[, c(1:3, seq(4, 15, 2))], id = c("m", "n", "mod"))
+df.sd <- melt(results[, c(1:3, seq(5, 25, 4))], id = c("m", "n", "mod"))
 colnames(df.sd) <- c("m", "n", "Setting", "Method", "sd")
 df.sd$Method <- sub("\\..*", "", df.sd[, "Method"])
 df <- merge(df.acc, df.sd)
@@ -282,13 +303,42 @@ df$Accuracy <- as.numeric(df$Accuracy)
 df$sd <- as.numeric(df$sd)
 
 ggplot(df, aes(x = m, y = Accuracy, group = Method, color = Method)) +
-  ylim(c(.25, 1)) +
-  # geom_errorbar(data = df, aes(ymin = Accuracy - sd
-  #                              , ymax = pmin(1, Accuracy + sd)
-  #                              , color = Method
-  #                              , width = 15)
-  #               , position = position_dodge(width = 0)) +
-  geom_point(aes(shape = Method), position = position_dodge(width = 5)) +
+  # ylim(c(0, 1)) +
+  geom_errorbar(data = df, aes(ymin = pmax(0, Accuracy - sd)
+                               , ymax = pmin(1, Accuracy + sd)
+                               , color = Method
+                               , width = 60)
+                , position = position_dodge(width = 10)) +
+  geom_point(aes(shape = Method), position = position_dodge(width = 10)) +
+  geom_line(position = position_dodge(width = 5)) +
+  scale_x_continuous(breaks = unique(results$m)[c(1, 3, 5)]) +
+  facet_grid(Setting ~ n) +
+  theme_bw()
+
+# AUC
+df.auc <- melt(results[, c(1:3, seq(6, 26, 4))], id = c("m", "n", "mod"))
+colnames(df.auc) <- c("m", "n", "Setting", "Method", "AUC")
+df.auc$Method <- sub("\\..*", "", df.acc[, "Method"])
+df.sd <- melt(results[, c(1:3, seq(7, 27, 4))], id = c("m", "n", "mod"))
+colnames(df.sd) <- c("m", "n", "Setting", "Method", "sd")
+df.sd$Method <- sub("\\..*", "", df.sd[, "Method"])
+df <- merge(df.auc, df.sd)
+
+df$n <- factor(df$n, levels = sort(unique(df$n)), labels = paste0("n = ", sort(unique(df$n))))
+df$Method <- factor(df$Method, levels = c("GP_F", "GP_lambda", "GP_RW", "SVM_RW", "GC", "MASE"), labels = c("GP-F", "GP-λ", "GP-RW", "SVM-RW", "GC", "MASE"))
+df$Setting <- factor(df$Setting, levels = 1:5, labels = c("small-world", "SBM", "corrER", "PA", "ERGM"))
+
+df$AUC <- as.numeric(df$AUC)
+df$sd <- as.numeric(df$sd)
+
+ggplot(df, aes(x = m, y = AUC, group = Method, color = Method)) +
+  # ylim(c(0, 1)) +
+  geom_errorbar(data = df, aes(ymin = pmax(0, AUC - sd)
+                               , ymax = pmin(1, AUC + sd)
+                               , color = Method
+                               , width = 60)
+                , position = position_dodge(width = 10)) +
+  geom_point(aes(shape = Method), position = position_dodge(width = 10)) +
   geom_line(position = position_dodge(width = 5)) +
   scale_x_continuous(breaks = unique(results$m)[c(1, 3, 5)]) +
   facet_grid(Setting ~ n) +

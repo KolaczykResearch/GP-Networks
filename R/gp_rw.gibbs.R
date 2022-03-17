@@ -60,11 +60,13 @@ gp_rw.class_pred <- function(gpc, K, split_index, burn = .2, thin = 10, avg = TR
     if (is.matrix(samp.fstar)) {
       ystar <- apply(samp.fstar, 2, function(i) sapply(i, ilogit))
       y.map <- rowMeans(ystar)
+      y.cred <- apply(ystar, 1, quantile, probs = c(.025, .975))
     } else {
       ystar <- sapply(samp.fstar, ilogit)
       y.map <- mean(ystar)
+      y.cred <- quantile(ystar, probs = c(.025, .975))
     }
     
-    return(y.map)
+    return(c(y.map, y.cred))
   }
 }
