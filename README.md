@@ -1,7 +1,7 @@
 # GP-Networks
 This repository contains code supporting the text "Bayesian classification, anomaly detection, and survival analysis using network inputs with application to the microbiome"
 
-https://arxiv.org/abs/2004.04765
+To appear in _Annals of Applied Statistics_: https://www.e-publications.org/ims/submission/AOAS/user/submissionFile/49636?confirm=aa8fd1a8
 
 ## R
 
@@ -10,15 +10,18 @@ https://arxiv.org/abs/2004.04765
 
 ## Figures
 
-* Figures 1, 7, 8 : Microbiome/microbiome.analysis.R
-* Figure 2           : Microbiome/microbiome.networks.R
-* Figure 4           : Simulations/simulation.class.R
-* Figure 5           : Simulations/simulation.occ.R
-* Figure 6           : Simulations/simulation.survival.R
+* Figures 1, 9, 11 : Microbiome/microbiome.R
+* Figure 2            : Microbiome/microbiome_networks.R
+* Figure 4            : Simulations/simulation.raw.R
+* Figure 5, 6         : Simulations/simulation.class.R
+* Figure 7            : Simulations/simulation.occ.R
+* Figure 8            : Simulations/simulation.survival.R
+* Figure 10           : Microbiome/microbiome_post_hoc.R
 
 ## Tables
 
-* Table 1 : Microbiome/microbiome.analysis.R
+* Table 1 : Microbiome/microbiome.R
+* Table 2 : Microbiome/microbiome_baseline.R & Microbiome/microbiome.R
 
 ## Data
 
