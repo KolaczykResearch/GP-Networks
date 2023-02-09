@@ -1,7 +1,11 @@
 # GP-Networks
 This repository contains code supporting the text "Bayesian classification, anomaly detection, and survival analysis using network inputs with application to the microbiome"
 
-To appear in _Annals of Applied Statistics_: https://www.e-publications.org/ims/submission/AOAS/user/submissionFile/49636?confirm=aa8fd1a8
+https://projecteuclid.org/journals/annals-of-applied-statistics/volume-17/issue-1/Bayesian-classification-anomaly-detection-and-survival-analysis-using-network-inputs/10.1214/22-AOAS1623.short
+
+## Citation
+
+Josephs, Nathaniel, Lizhen Lin, Steven Rosenberg, and Eric D. Kolaczyk. "Bayesian classification, anomaly detection, and survival analysis using network inputs with application to the microbiome." (2023). _The Annals of Applied Statistics_.
 
 ## Code
 
